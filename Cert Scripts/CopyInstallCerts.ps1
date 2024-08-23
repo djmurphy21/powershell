@@ -1,20 +1,28 @@
-Remotely Copy and install certs into Windows Cert Stores
-
 <#
 .SYNOPSIS
     Copy and install certs in server Cert Stores
 .NOTES
+    
 #>
 
-# Variables
-# Define the source file and the list of destination servers. Change the cert name as needed
-$sourceFile = "C:\Temp\CERTNAMEHERE"
-$destinationPath = "C$\Temp\"
-$servers = Get-Content "C:\TEMP\servers.txt"
+# Define mandatory parameters for the script
+param (
+    [Parameter(Mandatory = $true)]
+    [string]$SourceFile, # Source file path of the certificate
 
-# Certificate needs to already be on the server in the temp folder and change the cert name as needed
-$certPath = "C:\temp\CERTNAMEHERE"
-$certPass = Read-Host -Prompt "Enter the certificate password" -AsSecureString
+    [Parameter(Mandatory = $true)]
+    [string]$DestinationPath, # Destination path on the remote servers
+
+    [Parameter(Mandatory = $true)]
+    [string]$ServersFile, # Path to the file containing server names
+
+    [Parameter(Mandatory = $true)]
+    [string]$CertPath, # Path to the certificate file on the remote server
+
+    [Parameter(Mandatory = $true)]
+    [securestring]$CertPass          # Secure password for the certificate
+)
+
 
 # Function to copy file to a server
 function Copy-FileToServer {
@@ -51,7 +59,6 @@ function Install-Certificate {
         Write-Host "Failed to install the cert on $server -- $($_.ToString)"
     }
 }
-
 
 # Loop through each server and copy the file
 foreach ($server in $servers) {
