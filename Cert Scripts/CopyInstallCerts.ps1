@@ -2,7 +2,7 @@
 .SYNOPSIS
     Copy and install certs in server Cert Stores
 .NOTES
-    
+
 #>
 
 # Define mandatory parameters for the script
@@ -22,7 +22,6 @@ param (
     [Parameter(Mandatory = $true)]
     [securestring]$CertPass          # Secure password for the certificate
 )
-
 
 # Function to copy file to a server
 function Copy-FileToServer {
