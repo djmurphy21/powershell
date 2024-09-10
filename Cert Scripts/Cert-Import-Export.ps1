@@ -116,7 +116,7 @@ else {
     Write-Log -logName $Service -message "You entered $($pfxOutputPathParam) which does not match yes - restart script to try again"; exit
 }
 $logFilePathParam = Read-Host "If this is the correct path $($logFilePath) for the Cert information to be logged, type yes to proceed(case sensitive)"
-if ($logFilePathParam -eq "yes") {
+if ($logFilePathParam -ceq "yes") {
     Write-Log -logName $service -message "Path to generate the log file verified - $($logFilePath)"
 }
 else {
