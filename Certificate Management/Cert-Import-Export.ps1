@@ -19,7 +19,6 @@
         logFilePath: D:\Certificates
 #>
 
-
 # Parameters
 param (
     # Full Path for where the cert files are located
@@ -60,6 +59,7 @@ function New-RandomPassword {
     }
 }
 
+# Function to write logs to a file
 function Write-Log {
     param (
         [string]$LogName,
@@ -80,7 +80,7 @@ function Write-Log {
     }
 
     # Combine the folder path and log file name
-    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
+    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogName
 
     # Get the current date and time
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -103,24 +103,24 @@ $headers = "Certificate, Password"
 Write-Host "Please verify all paths are correct"
 $certPathParam = Read-Host "If this is the correct path $($certPath) for the certificates being imported, then type yes to proceed(case sensitive)"
 if ($certPathParam -ceq "yes") {
-    Write-Log -logName $Service -message "Path to certificates verified - $($certPath)"
+    Write-Log -logName $service -message "Path to certificates verified - $($certPath)"
 }
 else {
-    Write-Log -logName $Service -message "You entered $($certPathParam) which does not match yes - restart script to try again"; exit
+    Write-Log -logName $service -message "You entered $($certPathParam) which does not match yes - restart script to try again"; exit
 }
 $pfxOutputPathParam = Read-Host "If this is the correct path $($pfxOutputPath) for the PFX Certificates to be exported, then type yes to proceed(case sensitive)"
 if ($pfxOutputPathParam -ceq "yes") {
     Write-Log -logName $service -message "Path to export the PFX certificates verified - $($pfxOutputPath)"
 }
 else {
-    Write-Log -logName $Service -message "You entered $($pfxOutputPathParam) which does not match yes - restart script to try again"; exit
+    Write-Log -logName $service -message "You entered $($pfxOutputPathParam) which does not match yes - restart script to try again"; exit
 }
 $logFilePathParam = Read-Host "If this is the correct path $($logFilePath) for the Cert information to be logged, type yes to proceed(case sensitive)"
 if ($logFilePathParam -ceq "yes") {
     Write-Log -logName $service -message "Path to generate the log file verified - $($logFilePath)"
 }
 else {
-    Write-Log -logName $Service -message "You entered $($logFilePathParam) which does not match yes - restart script to try again"; exit
+    Write-Log -logName $service -message "You entered $($logFilePathParam) which does not match yes - restart script to try again"; exit
 }
 
 # Append the date to the specified log file path

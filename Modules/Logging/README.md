@@ -1,4 +1,4 @@
-# Write-Log PowerShell Module
+`# Write-Log PowerShell Module
 
 ## Synopsis
 
@@ -35,3 +35,4 @@ To use the `Write-Log` function, you need to import the module into your PowerSh
 ```powershell
 Write-Log -LogName "ApplicationLog" -Message "This is a log entry."
 ```
+

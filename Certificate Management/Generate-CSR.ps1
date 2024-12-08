@@ -33,40 +33,8 @@ param (
     # Full Path to create the folders, INFs and CSRs
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string] $Path
+    [string] $outputPath
 )
-
-function Write-Log {
-    param (
-        [string]$LogName,
-        [string]$Message
-    )
-
-    # Check if D:\Logs is available, otherwise use C:\Logs
-    if (Test-Path -Path "D:\Logs") {
-        $LogFolderPath = "D:\Logs"
-    }
-    else {
-        $LogFolderPath = "C:\Logs"
-    }
-
-    # Ensure the log folder exists
-    if (-not (Test-Path -Path $LogFolderPath)) {
-        New-Item -Path $LogFolderPath -ItemType Directory -Force
-    }
-
-    # Combine the folder path and log file name
-    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
-
-    # Get the current date and time
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-    # Format the log entry
-    $logEntry = "$timestamp - $Message"
-
-    # Write the log entry to the file
-    Add-Content -Path $LogFilePath -Value $logEntry
-}
 
 # Variables
 $date = Get-Date -Format MMddyyyy
@@ -86,63 +54,39 @@ if ($csvDataParam -ceq "yes") {
 else {
     Write-Log -logName $Service -message "You entered $($csvDataParam) which does not match yes - restart script to try again"; exit
 }
-$PathParam = Read-Host "If this is the correct path $($Path) for the folders, INF file and CSR file to be placed, then type yes to proceed(case sensitive)"
-if ($PathParam -ceq "yes") {
-    Write-Log -logName $Service -message "$($Path) set correctly."
+$outputPathParam = Read-Host "If this is the correct path $($outputPath) for the folders, INF file and CSR file to be placed, then type yes to proceed(case sensitive)"
+if ($outputPathParam -ceq "yes") {
+    Write-Log -logName $Service -message "$($outputPath) set correctly."
 }
 else {
-    Write-Log -logName $Service -message "You entered $($PathParam) which does not match yes - restart script to try again"; exit
+    Write-Log -logName $Service -message "You entered $($outputPathParam) which does not match yes - restart script to try again"; exit
 }
 
 # Prompt for Cert Subject information
 Write-Host "Please enter the remaining subject information"
-$OU = Read-Host: "Please provide the Organization Unit for the INF - Example IT : "
-$Org = Read-Host: "Please provide the Organization for the INF - Example DanTest Inc : "
-$Location = Read-Host: "Please provide the Location for the INF - Example New You City : "
-$State = Read-Host: "Please provide the State for the INF - Example New York : "
-$Country = Read-Host: "Please provide the Country for the INF - Example US : "
+$organizationalUnit = Read-Host: "Please provide the Organization Unit for the INF - Example IT : "
+$organization = Read-Host: "Please provide the Organization for the INF - Example DanTest Inc : "
+$location = Read-Host: "Please provide the Location for the INF - Example New You City : "
+$state = Read-Host: "Please provide the State for the INF - Example New York : "
+$country = Read-Host: "Please provide the Country for the INF - Example US : "
 
-foreach ($row in $CSV) {
-
-    # Clear variables from previous run to avoid undiagnosed failures
-    $certName = $null
-    $SANs = $null
-    $certFolder = $null
-    $CSRPath = $null
-    $INFPath = $null
-    $certNameWC = $null
-    $certFolderWC = $null
-    $CSRPathWC = $null
-    $INFPathWC = $null
-    $Signature = $null
-
-    # Define variables for each CSR inside of the CSV
-    $certName = $row.certName
-    $SANs = $row.SANs -split ','
-    $SANs = if ($row.SANs) { $row.SANs.Replace(' ', ',') -split ',' } else { @() }
-    $certFolder = "$($certName)_$($date)"
-    $CSRPath = "$($Path)\$($certFolder)\$($certName).csr"
-    $INFPath = "$($Path)\$($certFolder)\$($certName).inf"
-    $Signature = '$Windows'
+# Function to create the necessary folders and files
+function New-CSR {
+    param (
+        [string] $certName,
+        [string] $certFolder,
+        [string] $csrPath,
+        [string] $infPath
+    )
 
     # Create Cert folders for file placements
     try {
-        if ($certName -like '*') {
-            $certNameWC = $certName.Replace("*", "wc")
-            $certFolderWC = "$($certNameWC)_$($date)"
-            $CSRPathWC = "$($Path)\$($certFolderWC)\$($certNameWC).csr"
-            $INFPathWC = "$($Path)\$($certFolderWC)\$($certNameWC).inf"
-            New-Item -ItemType Directory -Force -Path $Path\$certFolderWC
-            Write-Log -logName $service -message "Successfully created $($certFolderWC) folder."
-        }
-        else {
-            New-Item -ItemType Directory -Force -Path $Path\$certFolder
-            Write-Log -logName $service -message "Successfully created $($certFolder) folder"
-        }
+        New-Item -ItemType Directory -Force -Path $outputPath\$certFolder
+        Write-Log -logName $service -message "Successfully created $($certFolder) folder."
     }
     catch {
         Write-Log -logName $service -message "Failed to create folder -- $($_.ToString())"
-        continue
+        return
     }
 
     # Split the SANs variable if multiple SANs are provided
@@ -152,12 +96,12 @@ foreach ($row in $CSV) {
     }
 
     # Create INF variable for the INF files
-    $INF = @"
+    $inf = @"
     [Version]
     Signature= "$Signature NT$"
 
     [NewRequest]
-    Subject = "CN=$certName,OU=$OU,O=$Org,L=$Location,S=$State,C=$Country"
+    Subject = "CN=$certName,OU=$organizationalUnit,O=$organization,L=$location,S=$state,C=$country"
     KeySpec = 1
     KeyLength = 2048
     Exportable = TRUE
@@ -178,40 +122,36 @@ foreach ($row in $CSV) {
     2.5.29.17 = "{text}"
     _continue_ = "dns=$certName &" 
     ${dnsSANs}
-
 "@
 
     # Create the INF file 
     try {
-        if ([string]::IsNullOrEmpty($certNameWC) -eq $false) {
-            Write-Log -logName $service -message "Creating the INF file for the $($certNameWC)"
-            $INF | Out-File -FilePath $INFPathWC -Force
-        }
-        else {
-            Write-Log -logName $service -message "Creating the INF file for the $($certName)"
-            $INF | Out-File -FilePath $INFPath -Force
-        }
+        $inf | Out-File -FilePath $infPath -Force
     }
     catch {
-        Write-Log -logName $service -message "Failed to create the INF file for the $($certName) -- $($_.ToString())"
-        Continue
-    } 
+        Write-Log -logName $service -message "Failed to create the INF file -- $($_.ToString())"
+        return
+    }
 
     # Create the CSR based off the information in the INF file
     try {
-        if ([string]::IsNullOrEmpty($certNameWC) -eq $false) {
-            Write-Log -logName $service -message "Creating the CSR for $($certNameWC) based on the INF file"
-            certreq.exe -new $INFPathWC $CSRPathWC
-        }
-        else {
-            Write-Log -logName $service -message "Creating the CSR for $($certName) based on the INF file"
-            certreq.exe -new $INFPath $CSRPath
-        }
+        certreq.exe -new $infPath $csrPath
     }
     catch {
-        Write-Log -logName $service -message "Failed to create the CSR file for $($certName) -- $($_.ToString())"
-        Continue
+        Write-Log -logName $service -message "Failed to create the CSR file -- $($_.ToString())"
+        return
     }
+}
+
+# Iterate through the CSV file and create the necessary folders and files
+foreach ($row in $CSV) {
+    $certName = $row.certName
+    $SANs = $row.SANs -split ','
+    $certFolder = "$($certName)_$($date)"
+    $csrPath = "$($outputPath)\$($certFolder)\$($certName).csr"
+    $infPath = "$($outputPath)\$($certFolder)\$($certName).inf"
+
+    Create-CSR -certName $certName -certFolder $certFolder -csrPath $csrPath -infPath $infPath
 }
 
 Write-Log -logName $service -message "Script execution completed"

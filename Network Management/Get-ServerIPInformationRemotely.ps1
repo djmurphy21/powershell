@@ -132,17 +132,12 @@ catch {
 }
 
 # Check if the HTML file exists
-try {
-    if (-not (Test-Path -Path $logFilePath)) {
-        New-Item -Path $logFilePath -ItemType Directory
-        Write-Log -logName $service -message "Directory created"
-    }
-    else {
-        Write-Log -logName $service -message "Directory already exists"
-    }
+if (-not (Test-Path -Path $logFilePath)) {
+    New-Item -Path $logFilePath -ItemType Directory
+    Write-Log -logName $service -message "Directory created"
 }
-catch {
-    Write-Log -logName $service -message "Unable to create directory"
+else {
+    Write-Log -logName $service -message "Directory already exists"
 }
 
 # Append the date to the specified log file path
