@@ -19,17 +19,6 @@
         logFilePath: D:\Certificates
 #>
 
-<<<<<<< HEAD
-# Import logging module
-$modulePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Modules\Logging\LoggingModule.psm1"
-if (Test-Path -Path $modulePath) {
-    Import-Module -Name $modulePath -Force
-}
-else {
-    throw "Logging module not found at: $modulePath"
-}
-=======
->>>>>>> parent of b818a26 (Updates)
 
 # Parameters
 param (
@@ -232,8 +221,6 @@ function Write-Log {
     # Write the log entry to the file
     Add-Content -Path $LogFilePath -Value $logEntry
 }
-<<<<<<< HEAD
-=======
 
 #Requires -RunAsAdministrator
 
@@ -351,4 +338,3 @@ Get-ChildItem -Path $certPath -Include *.p7b, *.crt, *.cer -Recurse | ForEach-Ob
 }
 
 Write-Log -logName $service -message "Script execution completed"
->>>>>>> parent of b818a26 (Updates)
