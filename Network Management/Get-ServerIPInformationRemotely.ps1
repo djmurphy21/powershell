@@ -151,6 +151,27 @@ catch {
     Write-Log -LogName $service -Message "Critical error in script execution: $_" -Severity Error -CorrelationId $correlationId
     throw
 }
-finally {
-    Write-Log -LogName $service -Message "Script execution finished" -Severity Information -CorrelationId $correlationId
+
+# Check if the HTML file exists
+try {
+    if (-not (Test-Path -Path $logFilePath)) {
+        New-Item -Path $logFilePath -ItemType Directory
+        Write-Log -logName $service -message "Directory created"
+    }
+    else {
+        Write-Log -logName $service -message "Directory already exists"
+    }
 }
+catch {
+    Write-Log -logName $service -message "Unable to create directory"
+}
+
+# Append the date to the specified log file path
+$logFilePath = $logFilePath + "\$($service)_$date.html"
+
+# Export all the data to an HTML file with custom table formatting
+$remoteIPInfo | 
+ConvertTo-Html -Head "<style>table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; text-align: left; } th { background-color: #f2f2f2; }</style>" -Property ServerName, IPv4Address, IPv4SubnetMask, IPv4DefaultGateway, DNSServers | 
+Out-File -FilePath $logFilePath
+
+Write-Log -logName $service -message "Script execution completed"

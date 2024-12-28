@@ -7,31 +7,20 @@
 
 <#
 .SYNOPSIS
-    Logs messages to a specified log file with timestamps and severity levels.
+    The Write-Log function is a PowerShell script designed to log messages to a specified log file. It ensures the log file is created in the appropriate directory and appends log entries with timestamps.
 .DESCRIPTION
-    The Write-Log function logs messages by creating or appending to a log file in a specified directory. 
-    It supports multiple severity levels and can automatically rotate log files based on size.
-    The function checks for the existence of the D:\Logs directory and defaults to C:\Logs if not found.
-    Each log entry includes timestamp, severity level, and optional correlation ID for tracking related events.
-.PARAMETER LogName
-    The name of the log file (with or without .log extension).
-.PARAMETER Message
-    The message to be logged.
-.PARAMETER Severity
-    The severity level of the message (Information, Warning, Error, Debug).
-.PARAMETER CorrelationId
-    Optional correlation ID for tracking related log entries.
-.PARAMETER MaxLogSizeMB
-    Maximum log file size in MB before rotation (default: 10MB).
-.EXAMPLE
-    Write-Log -LogName "MyApp" -Message "Process started" -Severity Information
-.EXAMPLE
-    Write-Log -LogName "MyApp" -Message "Error occurred" -Severity Error -CorrelationId "123"
+    The Write-Log function takes two parameters: LogName and Message. It checks if the D:\Logs directory is available; if not, it defaults to C:\Logs. 
+    The function ensures the log file name ends with .log and combines the folder path with the log file name. 
+    It creates the log directory if it doesn't exist and writes the log entry with a timestamp to the log file. 
+    If the log file doesn't exist, it creates a new one.
 .NOTES
-    File Names: Logs are automatically suffixed with date (MyApp_2024-12-27.log)
-    Log Rotation: Automatically rotates logs when they exceed MaxLogSizeMB
-    Error Handling: Includes comprehensive error handling and fallback options
-    Correlation: Supports tracking related events through correlation IDs
+    Parameters:
+        - LogName: The name of the log file.
+        - Message: The message to be logged.
+    Directory Check: The function checks for the existence of D:\Logs and defaults to C:\Logs if not found.
+    Log File Creation: Ensures the log file ends with .log and creates the file if it doesn't exist.
+    Timestamp: Each log entry is prefixed with the current date and time in the format yyyy-MM-dd HH:mm:ss.
+    Error Handling: The function includes error handling for directory and file creation, as well as for writing log entries.
 #>
 
 function Write-Log {
@@ -57,59 +46,33 @@ function Write-Log {
         [int]$MaxLogSizeMB = 10
     )
 
-    begin {
-        # Set strict mode for better error handling
-        Set-StrictMode -Version Latest
-        $ErrorActionPreference = 'Stop'
-
-        # Determine the log folder path
-        $LogFolderPath = if (Test-Path -Path "D:\Logs") { "D:\Logs" } else { "C:\Logs" }
-
-        # Create date-based log filename
-        $Date = Get-Date -Format "yyyy-MM-dd"
-        $LogName = $LogName.TrimEnd('.log')
-        $LogFileName = "${LogName}_${Date}.log"
-        $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
+    # Check if D:\Logs is available, otherwise use C:\Logs
+    if (Test-Path -Path "D:\Logs") {
+        $LogFolderPath = "D:\Logs"
+    }
+    else {
+        $LogFolderPath = "C:\Logs"
     }
 
-    process {
+    # Log the folder path for debugging
+    Write-Output "Log Folder Path: $LogFolderPath"
+
+    # Ensure the log name ends with .log
+    if (-not $LogName.EndsWith(".log")) {
+        $LogName = "$LogName.log"
+    }
+
+    # Combine the folder path and log file name
+    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogName
+
+    # Log the file path for debugging
+    Write-Output "Log File Path: $LogFilePath"
+
+    # Ensure the log folder exists
+    if (-not (Test-Path -Path $LogFolderPath)) {
         try {
-            # Ensure the log folder exists
-            if (-not (Test-Path -Path $LogFolderPath)) {
-                $null = New-Item -Path $LogFolderPath -ItemType Directory -Force
-                Write-Verbose "Created log directory: $LogFolderPath"
-            }
-
-            # Check if log rotation is needed
-            if (Test-Path -Path $LogFilePath) {
-                $logFile = Get-Item -Path $LogFilePath
-                if ($logFile.Length/1MB -gt $MaxLogSizeMB) {
-                    $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-                    $rotatedName = "${LogName}_${Date}_${timestamp}.log"
-                    $rotatedPath = Join-Path -Path $LogFolderPath -ChildPath $rotatedName
-                    Move-Item -Path $LogFilePath -Destination $rotatedPath -Force
-                    Write-Verbose "Rotated log file to: $rotatedPath"
-                }
-            }
-
-            # Format the log entry
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
-            $logEntry = "[$timestamp] [$Severity]"
-            if ($CorrelationId) {
-                $logEntry += " [CorrelationId:$CorrelationId]"
-            }
-            $logEntry += " - $Message"
-
-            # Write to log file
-            $null = Add-Content -Path $LogFilePath -Value $logEntry -Encoding UTF8
-
-            # Output to console based on severity
-            switch ($Severity) {
-                'Error' { Write-Error $Message }
-                'Warning' { Write-Warning $Message }
-                'Debug' { Write-Debug $Message }
-                default { Write-Verbose $Message }
-            }
+            New-Item -Path $LogFolderPath -ItemType Directory -Force -ErrorAction Stop
+            Write-Output "Log folder created: $LogFolderPath"
         }
         catch {
             # Try writing to alternate location if primary fails
@@ -125,7 +88,32 @@ function Write-Log {
             }
         }
     }
-}
 
-# Export the function
-Export-ModuleMember -Function Write-Log
+    # Get the current date and time
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    # Format the log entry
+    $logEntry = "$timestamp - $Message"
+
+    # Check if the file exists, and create it if it doesn't
+    if (-not (Test-Path -Path $LogFilePath)) {
+        try {
+            # Create the file and add a header (optional)
+            Write-Output "Creating new log file: $LogFilePath"
+            New-Item -Path $LogFilePath -ItemType File -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Error "Failed to create log file: $LogFilePath. Error: $_"
+            return
+        }
+    }
+
+    # Try to write the log entry to the file
+    try {
+        Add-Content -Path $LogFilePath -Value $logEntry -ErrorAction Stop
+        Write-Output "Log entry written successfully to $LogFilePath."
+    }
+    catch {
+        Write-Error "Failed to write to log file: $LogFilePath. Error: $_"
+    }
+}

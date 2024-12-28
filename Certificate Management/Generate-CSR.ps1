@@ -23,32 +23,54 @@ Key functionality includes:
 depending on the availability of the directory.
 #>
 
-# Import logging module
-$modulePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Modules\Logging\LoggingModule.psm1"
-if (Test-Path -Path $modulePath) {
-    Import-Module -Name $modulePath -Force
-}
-else {
-    throw "Logging module not found at: $modulePath"
-}
-
 # Parameters
-param (
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [ValidateScript({
-        if (Test-Path $_ -PathType Leaf) { $true } else { throw "CSV file not found at: $_" }
-    })]
-    [string] $csvData,
 
+param (
+    # Full Path for .csv import
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [ValidateScript({
-        if (-not (Test-Path $_)) { New-Item -Path $_ -ItemType Directory -Force | Out-Null }
-        $true
-    })]
-    [string] $outputPath
+    [string] $csvData,
+    # Full Path to create the folders, INFs and CSRs
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $outputPath,
+    # Full path to place the log file
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Path
 )
+
+function Write-Log {
+    param (
+        [string]$LogName,
+        [string]$Message
+    )
+
+    # Check if D:\Logs is available, otherwise use C:\Logs
+    if (Test-Path -Path "D:\Logs") {
+        $LogFolderPath = "D:\Logs"
+    }
+    else {
+        $LogFolderPath = "C:\Logs"
+    }
+
+    # Ensure the log folder exists
+    if (-not (Test-Path -Path $LogFolderPath)) {
+        New-Item -Path $LogFolderPath -ItemType Directory -Force
+    }
+
+    # Combine the folder path and log file name
+    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
+
+    # Get the current date and time
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    # Format the log entry
+    $logEntry = "$timestamp - $Message"
+
+    # Write the log entry to the file
+    Add-Content -Path $LogFilePath -Value $logEntry
+}
 
 # Variables
 $date = Get-Date -Format MMddyyyy
@@ -61,28 +83,81 @@ try {
     # Log Creation
     Write-Log -logName $service -message "Starting $service process for $($date)"
 
-    # Import and validate CSV
-    try {
+    # Confirm all paths provided and import CSV
+    Write-Host "Please verify all paths are correct"
+    $csvDataParam = Read-Host "If this is the correct path $($csvData) for the CSV File being used to generate the data, then type yes to proceed(case sensitive)"
+    if ($csvDataParam -ceq "yes") {
+        # Import corrected CSV
+        Write-Log -logName $Service -message "Importing CSV"
         $CSV = Import-Csv -Path $csvData
-        if ($CSV.Count -eq 0) {
-            throw "CSV file is empty"
+    }
+    else {
+        Write-Log -logName $Service -message "You entered $($csvDataParam) which does not match yes - restart script to try again"; exit
+    }
+    $PathParam = Read-Host "If this is the correct path $($Path) for the folders, INF file and CSR file to be placed, then type yes to proceed(case sensitive)"
+    if ($PathParam -ceq "yes") {
+        Write-Log -logName $Service -message "$($Path) set correctly."
+    }
+    else {
+        Write-Log -logName $Service -message "You entered $($PathParam) which does not match yes - restart script to try again"; exit
+    }
+}
+catch {
+    Write-Log -logName $service -message "Failed to import the CSV file -- $($_.ToString())"
+    Continue
+}
+
+# Prompt for Cert Subject information
+Write-Host "Please enter the remaining subject information"
+$OU = Read-Host: "Please provide the Organization Unit for the INF - Example IT : "
+$Org = Read-Host: "Please provide the Organization for the INF - Example DanTest Inc : "
+$Location = Read-Host: "Please provide the Location for the INF - Example New You City : "
+$State = Read-Host: "Please provide the State for the INF - Example New York : "
+$Country = Read-Host: "Please provide the Country for the INF - Example US : "
+
+foreach ($row in $CSV) {
+
+    # Clear variables from previous run to avoid undiagnosed failures
+    $certName = $null
+    $SANs = $null
+    $certFolder = $null
+    $CSRPath = $null
+    $INFPath = $null
+    $certNameWC = $null
+    $certFolderWC = $null
+    $CSRPathWC = $null
+    $INFPathWC = $null
+    $Signature = $null
+
+    # Define variables for each CSR inside of the CSV
+    $certName = $row.certName
+    $SANs = $row.SANs -split ','
+    $SANs = if ($row.SANs) { $row.SANs.Replace(' ', ',') -split ',' } else { @() }
+    $certFolder = "$($certName)_$($date)"
+    $CSRPath = "$($Path)\$($certFolder)\$($certName).csr"
+    $INFPath = "$($Path)\$($certFolder)\$($certName).inf"
+    $Signature = '$Windows'
+
+    # Create Cert folders for file placements
+    try {
+        if ($certName -like '*') {
+            $certNameWC = $certName.Replace("*", "wc")
+            $certFolderWC = "$($certNameWC)_$($date)"
+            $CSRPathWC = "$($Path)\$($certFolderWC)\$($certNameWC).csr"
+            $INFPathWC = "$($Path)\$($certFolderWC)\$($certNameWC).inf"
+            New-Item -ItemType Directory -Force -Path $Path\$certFolderWC
+            Write-Log -logName $service -message "Successfully created $($certFolderWC) folder."
         }
-        
-        # Validate required columns exist
-        $requiredColumns = @('certName', 'SANs', 'organizationalUnit', 'organization', 'location', 'state', 'country')
-        $missingColumns = $requiredColumns | Where-Object { -not ($CSV | Get-Member -Name $_) }
-        
-        if ($missingColumns) {
-            throw "CSV file is missing required columns: $($missingColumns -join ', ')"
+        else {
+            New-Item -ItemType Directory -Force -Path $Path\$certFolder
+            Write-Log -logName $service -message "Successfully created $($certFolder) folder"
         }
-        
-        Write-Log -logName $service -message "Successfully imported CSV with $($CSV.Count) certificate requests"
     }
     catch {
-        Write-Log -logName $service -message "Failed to import CSV: $($_.Exception.Message)"
-        throw
+        Write-Log -logName $service -message "Failed to create folder -- $($_.ToString())"
+        continue
     }
-
+}
     # Function to create the necessary folders and files
     function New-CSR {
         [CmdletBinding()]
@@ -106,6 +181,7 @@ try {
             [Parameter(Mandatory)]
             [string] $country
         )
+    }
 
         try {
             # Create Cert folders for file placements
@@ -120,91 +196,76 @@ try {
             }
 
             # Create INF variable for the INF files
+            $INF = @"
+    [Version]
+    Signature= "$Signature NT$"
+
+    [NewRequest]
+    Subject = "CN=$certName,OU=$OU,O=$Org,L=$Location,S=$State,C=$Country"
+    KeySpec = 1
+    KeyLength = 2048
+    Exportable = TRUE
+    MachineKeySet = TRUE
+    SMIME = False
+    PrivateKeyArchive = FALSE
+    UserProtected = FALSE
+    UseExistingKeySet = FALSE
+    ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
+    ProviderType = 12
+    RequestType = PKCS10
+    KeyUsage = 0xa0
+
+            # Create INF variable for the INF files
             $inf = @"
 [Version]
 Signature= "`$Windows NT`$"
 
-[NewRequest]
-Subject = "CN=$certName,OU=$organizationalUnit,O=$organization,L=$location,S=$state,C=$country"
-KeySpec = 1
-KeyLength = 2048
-Exportable = TRUE
-MachineKeySet = TRUE
-SMIME = False
-PrivateKeyArchive = FALSE
-UserProtected = FALSE
-UseExistingKeySet = FALSE
-ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
-ProviderType = 12
-RequestType = PKCS10
-KeyUsage = 0xa0
+    [Extensions]
+    2.5.29.17 = "{text}"
+    _continue_ = "dns=$certName &" 
+    ${dnsSANs}
 
-[EnhancedKeyUsageExtension]
-OID=1.3.6.1.5.5.7.3.1
-
-[Extensions]
-2.5.29.17 = "{text}"
-_continue_ = "dns=$certName &" 
-${dnsSANs}
 "@
 
             # Create the INF file 
-            $inf | Out-File -FilePath $infPath -Force -Encoding UTF8
-            Write-Log -logName $service -message "Created INF file for $certName"
+            try {
+                if ([string]::IsNullOrEmpty($certNameWC) -eq $false) {
+                    Write-Log -logName $service -message "Creating the INF file for the $($certNameWC)"
+                    $INF | Out-File -FilePath $INFPathWC -Force
+                }
+                else {
+                    Write-Log -logName $service -message "Creating the INF file for the $($certName)"
+                    $INF | Out-File -FilePath $INFPath -Force
+                }
+            }
+            catch {
+                Write-Log -logName $service -message "Failed to create the INF file for the $($certName) -- $($_.ToString())"
+                Continue
+            } 
 
             # Create the CSR based off the information in the INF file
-            $result = certreq.exe -new $infPath $csrPath
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log -logName $service -message "Successfully created CSR for $certName"
+            try {
+                if ([string]::IsNullOrEmpty($certNameWC) -eq $false) {
+                    Write-Log -logName $service -message "Creating the CSR for $($certNameWC) based on the INF file"
+                    certreq.exe -new $INFPathWC $CSRPathWC
+                }
+                else {
+                    Write-Log -logName $service -message "Creating the CSR for $($certName) based on the INF file"
+                    certreq.exe -new $INFPath $CSRPath
+                }
             }
-            else {
-                throw "certreq.exe failed with exit code $LASTEXITCODE. Output: $result"
+            catch {
+                Write-Log -logName $service -message "Failed to create the CSR file for $($certName) -- $($_.ToString())"
+                Continue
             }
+
+            Write-Progress -Activity "Generating CSRs" -Completed
+            Write-Log -logName $service -message "Script execution completed"
+            Write-Log -LogName "CertificateManagement" -Message "CSR generated successfully at: $OutputPath" -Severity Information
         }
         catch {
-            Write-Log -logName $service -message "Error processing certificate $certName : $($_.Exception.Message)"
-            throw
+            Write-Log -logName $service -message "Failed to create the CSR file for $($certName) -- $($_.ToString())"
+            Continue
         }
-    }
 
-    # Process each certificate request
-    $total = $CSV.Count
-    $current = 0
-
-    foreach ($row in $CSV) {
-        $current++
-        Write-Progress -Activity "Generating CSRs" -Status "Processing $($row.certName)" -PercentComplete (($current / $total) * 100)
-        
-        try {
-            $params = @{
-                certName = $row.certName.Trim()
-                certFolder = "$($row.certName.Trim())_$date"
-                csrPath = "$outputPath\$($row.certName.Trim())_$date\$($row.certName.Trim()).csr"
-                infPath = "$outputPath\$($row.certName.Trim())_$date\$($row.certName.Trim()).inf"
-                organizationalUnit = $row.organizationalUnit.Trim()
-                organization = $row.organization.Trim()
-                location = $row.location.Trim()
-                state = $row.state.Trim()
-                country = $row.country.Trim()
-            }
-            
-            $SANs = $row.SANs -split ',' | ForEach-Object { $_.Trim() }
-            New-CSR @params
-        }
-        catch {
-            Write-Log -logName $service -message "Failed to process $($row.certName): $($_.Exception.Message)"
-            continue
-        }
-    }
-
-    Write-Progress -Activity "Generating CSRs" -Completed
-    Write-Log -logName $service -message "Script execution completed"
-    Write-Log -LogName "CertificateManagement" -Message "CSR generated successfully at: $OutputPath" -Severity Information
-}
-catch {
-    Write-Log -LogName "CertificateManagement" -Message "Failed to generate CSR: $_" -Severity Error
-    throw
-}
-finally {
-    Write-Log -LogName "CertificateManagement" -Message "CSR generation process completed" -Severity Information
-}
+        Write-Log -logName $service -message "Script execution completed"
