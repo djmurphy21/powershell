@@ -24,15 +24,6 @@ Example:
 .\Get-ServerIPInfoRemotely.ps1 -serversfile "C:\path\to\servers.txt" -logFilePath "C:\path\to\log"
 #>
 
-# Import logging module
-$modulePath = Join-Path -Path $PSScriptRoot -ChildPath "..\Modules\Logging\LoggingModule.psm1"
-if (Test-Path -Path $modulePath) {
-    Import-Module -Name $modulePath -Force
-}
-else {
-    throw "Logging module not found at: $modulePath"
-}
-
 # Parameters
 param (
     # Path and file containing server information
@@ -45,6 +36,38 @@ param (
     [string] $logFilePath
 )
 
+function Write-Log {
+    param (
+        [string]$LogName,
+        [string]$Message
+    )
+
+    # Check if D:\Logs is available, otherwise use C:\Logs
+    if (Test-Path -Path "D:\Logs") {
+        $LogFolderPath = "D:\Logs"
+    }
+    else {
+        $LogFolderPath = "C:\Logs"
+    }
+
+    # Ensure the log folder exists
+    if (-not (Test-Path -Path $LogFolderPath)) {
+        New-Item -Path $LogFolderPath -ItemType Directory -Force
+    }
+
+    # Combine the folder path and log file name
+    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
+
+    # Get the current date and time
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    # Format the log entry
+    $logEntry = "$timestamp - $Message"
+
+    # Write the log entry to the file
+    Add-Content -Path $LogFilePath -Value $logEntry
+}
+
 # Function to pull IP information from the remote server
 function Get-IPInfo {
     param (
@@ -55,7 +78,7 @@ function Get-IPInfo {
     try {
         # Create a CIM session
         $session = New-CimSession -ComputerName $ServerName -Credential $Credential
-        Write-Log -LogName "Get Server IP Information" -Message "Created CIM session for $ServerName" -Severity Information
+        Write-Log -logName "Get Server IP Information" -message "Created CIM session for $ServerName"
 
         # Get network information
         $netInfo = Get-CimInstance -CimSession $session -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true } | ForEach-Object {
@@ -71,99 +94,50 @@ function Get-IPInfo {
 
         # Remove the CIM session
         Remove-CimSession -CimSession $session
-        Write-Log -LogName "Get Server IP Information" -Message "Removed CIM session for $ServerName" -Severity Information
+        Write-Log -logName "Get Server IP Information" -message "Removed CIM session for $ServerName"
 
         return $netInfo
     }
     catch {
-        Write-Log -LogName "Get Server IP Information" -Message "Error getting IP information from $ServerName : $($_.Exception.Message)" -Severity Error
+        Write-Log -logName "Get Server IP Information" -message "Failed to retrieve network information from $ServerName -- $($_.Exception.Message)"
         return $null
     }
 }
 
 # Variables
 $service = "Get Server IP Information"
+$servers = Get-Content -Path $serversfile
+$cred = Get-Credential
 $date = Get-Date -Format MMddyyyy
-$correlationId = [guid]::NewGuid().ToString()
 
+# Array
+$remoteIPInfo = @()
+
+# Pull the data
 try {
-    Write-Log -LogName $service -Message "Starting IP information collection process" -Severity Information -CorrelationId $correlationId
-    
-    # Validate input file
-    if (-not (Test-Path -Path $serversfile)) {
-        throw "Servers file not found: $serversfile"
-    }
-
-    $servers = Get-Content -Path $serversfile
-    if ($servers.Count -eq 0) {
-        throw "No servers found in file: $serversfile"
-    }
-
-    Write-Log -LogName $service -Message "Found $($servers.Count) servers to process" -Severity Information -CorrelationId $correlationId
-
-    # Get credentials
-    $cred = Get-Credential -Message "Enter credentials for remote server access"
-
-    # Array for results
-    $remoteIPInfo = @()
-
-    # Pull the data
-    $serverCount = $servers.Count
-    $currentServer = 0
-
     foreach ($server in $servers) {
-        $currentServer++
-        $progressParams = @{
-            Activity = "Retrieving Server IP Information"
-            Status = "Processing server $currentServer of $serverCount"
-            PercentComplete = ($currentServer / $serverCount * 100)
-        }
-        Write-Progress @progressParams
-
-        Write-Log -LogName $service -Message "Processing server: $server" -Severity Information -CorrelationId $correlationId
+        Write-Log -logName $service -message "Pull IP information from $server"
         $IPInfo = Get-IPInfo -ServerName $server -Credential $cred
-        
         if ($IPInfo) {
             $remoteIPInfo += $IPInfo
         }
         else {
-            Write-Log -LogName $service -Message "No IP information retrieved from $server" -Severity Warning -CorrelationId $correlationId
+            Write-Log -logName $service -message "No IP information retrieved from $server"
         }
     }
-
-    Write-Progress -Activity "Retrieving Server IP Information" -Completed
-
-    # Export the data
-    if ($remoteIPInfo.Count -gt 0) {
-        $outputPath = Join-Path -Path $logFilePath -ChildPath "ServerIPInfo_$date.html"
-        $remoteIPInfo | 
-        ConvertTo-Html -Head "<style>table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid black; padding: 8px; text-align: left; } th { background-color: #f2f2f2; }</style>" -Property ServerName, IPv4Address, IPv4SubnetMask, IPv4DefaultGateway, DNSServers | 
-        Out-File -FilePath $outputPath
-        Write-Log -LogName $service -Message "Successfully exported IP information to $outputPath" -Severity Information -CorrelationId $correlationId
-    }
-    else {
-        Write-Log -LogName $service -Message "No IP information collected from any servers" -Severity Warning -CorrelationId $correlationId
-    }
-
-    Write-Log -LogName $service -Message "Script execution completed successfully" -Severity Information -CorrelationId $correlationId
 }
 catch {
-    Write-Log -LogName $service -Message "Critical error in script execution: $_" -Severity Error -CorrelationId $correlationId
-    throw
+    Write-Log -logName $service -message "Failed to pull IP information from $server -- $($_.ToString())"
+    Continue
 }
 
 # Check if the HTML file exists
-try {
-    if (-not (Test-Path -Path $logFilePath)) {
-        New-Item -Path $logFilePath -ItemType Directory
-        Write-Log -logName $service -message "Directory created"
-    }
-    else {
-        Write-Log -logName $service -message "Directory already exists"
-    }
+if (-not (Test-Path -Path $logFilePath)) {
+    New-Item -Path $logFilePath -ItemType Directory
+    Write-Log -logName $service -message "Directory created"
 }
-catch {
-    Write-Log -logName $service -message "Unable to create directory"
+else {
+    Write-Log -logName $service -message "Directory already exists"
 }
 
 # Append the date to the specified log file path
