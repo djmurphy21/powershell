@@ -84,7 +84,6 @@ function Write-Log {
         }
     }
 
-<<<<<<< HEAD
     $LogFileName = "{0}_{1:yyyy-MM-dd}.log" -f $LogName, (Get-Date)
     $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -125,24 +124,6 @@ function Test-ServerConnection {
         Write-Log -LogName $service -Message "Error testing connection to ${ServerName}: $_" -Severity 'Error'
         return ${false} -eq $false
     }
-=======
-    # Ensure the log folder exists
-    if (-not (Test-Path -Path $LogFolderPath)) {
-        New-Item -Path $LogFolderPath -ItemType Directory -Force
-    }
-
-    # Combine the folder path and log file name
-    $LogFilePath = Join-Path -Path $LogFolderPath -ChildPath $LogFileName
-
-    # Get the current date and time
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-    # Format the log entry
-    $logEntry = "$timestamp - $Message"
-
-    # Write the log entry to the file
-    Add-Content -Path $LogFilePath -Value $logEntry
->>>>>>> parent of b818a26 (Updates)
 }
 
 # Function to copy file to a server
@@ -157,7 +138,6 @@ function Copy-FileToServer {
         [Parameter(Mandatory = $true)]
         [string]$destination
     )
-<<<<<<< HEAD
     
     Write-Log -LogName $service -Message "Attempting to copy the file to $server" -Severity Information
 
@@ -165,8 +145,6 @@ function Copy-FileToServer {
         return $false
     }
 
-=======
->>>>>>> parent of b818a26 (Updates)
     try {
         $destinationFolder = Split-Path -Path $destination -Parent
         if (-not (Test-Path -Path $destinationFolder)) {
@@ -195,7 +173,6 @@ function Install-Certificate {
         [Parameter(Mandatory = $true)]
         [securestring]$password
     )
-<<<<<<< HEAD
     
     Write-Log -LogName $service -Message "Attempting to install the certificate on $server" -Severity Information
 
@@ -203,8 +180,6 @@ function Install-Certificate {
         return $false
     }
 
-=======
->>>>>>> parent of b818a26 (Updates)
     try {
         Invoke-Command -ComputerName $server -ScriptBlock {
             param($path, [SecureString]$password)
@@ -221,7 +196,6 @@ function Install-Certificate {
                 NotAfter = $cert.NotAfter
             }
         } -ArgumentList $path, $password
-<<<<<<< HEAD
 
         Write-Log -LogName $service -Message "Certificate installed on $server successfully:" -Severity Information
         Write-Log -LogName $service -Message "Friendly Name: $($cert.FriendlyName)" -Severity Information
@@ -295,24 +269,3 @@ catch {
 finally {
     Write-Log -LogName $service -Message "Script execution completed" -Severity Information
 }
-=======
-        Write-Log -LogName $service -message "Certificate installed on $server with Friendly Name: $result"
-    }
-    catch {
-        Write-Log -LogName $service -messaget "Failed to install the cert on $server -- $($_.ToString)"
-    }
-}
-
-# Loop through each server and copy the file
-foreach ($server in $servers) {
-    $destination = "\\$server\$destinationPath"
-    Copy-FileToServer -server $server -source $sourceFile -destination $destination
-}
-
-# Loop through each server and install the certificate
-foreach ($server in $servers) {
-    Install-Certificate -server $server -path $certPath -password $certPass
-}
-
-Write-Host "Script execution completed"
->>>>>>> parent of b818a26 (Updates)
