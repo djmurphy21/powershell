@@ -33,12 +33,21 @@ param (
     # Full Path to create the folders, INFs and CSRs
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string] $outputPath
+    [string] $Path
 )
 
 # Variables
 $date = Get-Date -Format MMddyyyy
 $service = "Generate CSR"
+
+# Import Modules
+try {
+    Import-Module LoggingModule -Force
+}
+catch {
+    Write-Log -logName $service -message "Failed to import Logging Module -- $($_.ToString())"
+    exit
+}
 
 # Log Creation
 Write-Log -logName $service -message "Starting $service process for $($date)"
@@ -54,12 +63,12 @@ if ($csvDataParam -ceq "yes") {
 else {
     Write-Log -logName $Service -message "You entered $($csvDataParam) which does not match yes - restart script to try again"; exit
 }
-$outputPathParam = Read-Host "If this is the correct path $($outputPath) for the folders, INF file and CSR file to be placed, then type yes to proceed(case sensitive)"
-if ($outputPathParam -ceq "yes") {
-    Write-Log -logName $Service -message "$($outputPath) set correctly."
+$PathParam = Read-Host "If this is the correct path $($Path) for the folders, INF file and CSR file to be placed, then type yes to proceed(case sensitive)"
+if ($PathParam -ceq "yes") {
+    Write-Log -logName $Service -message "$($Path) set correctly."
 }
 else {
-    Write-Log -logName $Service -message "You entered $($outputPathParam) which does not match yes - restart script to try again"; exit
+    Write-Log -logName $Service -message "You entered $($PathParam) which does not match yes - restart script to try again"; exit
 }
 
 # Prompt for Cert Subject information
@@ -81,7 +90,7 @@ function New-CSR {
 
     # Create Cert folders for file placements
     try {
-        New-Item -ItemType Directory -Force -Path $outputPath\$certFolder
+        New-Item -ItemType Directory -Force -Path $Path\$certFolder
         Write-Log -logName $service -message "Successfully created $($certFolder) folder."
     }
     catch {
@@ -148,8 +157,8 @@ foreach ($row in $CSV) {
     $certName = $row.certName
     $SANs = $row.SANs -split ','
     $certFolder = "$($certName)_$($date)"
-    $csrPath = "$($outputPath)\$($certFolder)\$($certName).csr"
-    $infPath = "$($outputPath)\$($certFolder)\$($certName).inf"
+    $csrPath = "$($Path)\$($certFolder)\$($certName).csr"
+    $infPath = "$($Path)\$($certFolder)\$($certName).inf"
 
     Create-CSR -certName $certName -certFolder $certFolder -csrPath $csrPath -infPath $infPath
 }
